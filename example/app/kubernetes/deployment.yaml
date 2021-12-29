@@ -43,6 +43,8 @@ spec:
             - containerPort: 50051
               name: http
           env:
+          - name: SPANNER_EMULATOR_HOST
+            value: spanner:9010
           - name: POD_NAME
             valueFrom:
               fieldRef:
