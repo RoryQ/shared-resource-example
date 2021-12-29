@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spanner
+  labels:
+    app: spanner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spanner-emulator
+  template:
+    metadata:
+      labels:
+        app: spanner-emulator
+    spec:
+      containers:
+        - name: spanner-emulator
+          image: roryq/spanner-emulator:1.4.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+          ports:
+            - containerPort: 9020
+              protocol: TCP
+              name: http
+            - containerPort: 9010
+              protocol: TCP
+              name: grpc
+          env:
+            - name: SPANNER_PROJECT_ID
+              value: proj
+            - name: SPANNER_INSTANCE_ID
+              value: inst
+            - name: SPANNER_DATABASE_ID
+              value: db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spanner
+  labels:
+    app: spanner
+spec:
+  ports:
+    - name: spanner-http
+      port: 9020
+      targetPort: 9020
+      protocol: TCP
+    - name: spanner-grpc
+      port: 9010
+      targetPort: 9010
+      protocol: TCP
+  selector:
+    app: spanner-emulator
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: schema-migrations
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-for-deps
+          image: gcr.io/distroless/base-debian11:debug
+          command: ["/busybox/sh"]
+          args:
+            - "-c"
+            - >-
+              while ! wget http://spanner:9020/v1/projects/proj/instances -qO -; do
+              sleep 1; done
+      restartPolicy: Never
+      containers:
+        - name: schema-migrations
+          image: schema-migrations
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPANNER_EMULATOR_HOST
+              value: spanner:9010
+            - name: SPANNER_PROJECT_ID
+              value: proj
+            - name: SPANNER_INSTANCE_ID
+              value: inst
+            - name: SPANNER_DATABASE_ID
+              value: db

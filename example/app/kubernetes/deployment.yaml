@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: takelock-app
+  labels:
+    app: takelock-app
+spec:
+  clusterIP: None
+  ports:
+    - port: 50051
+      name: takelock-app
+  selector:
+    app: takelock-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: takelock-app
+  labels:
+    app: takelock-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: takelock-app
+  template:
+    metadata:
+      labels:
+        app: takelock-app
+    spec:
+      containers:
+        - name: takelock-app
+          image: takelock-app
+          ports:
+            - containerPort: 50051
+              name: http

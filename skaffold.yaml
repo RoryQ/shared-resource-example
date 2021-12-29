@@ -1,0 +1,19 @@
+apiVersion: skaffold/v2beta26
+kind: Config
+metadata:
+  name: shared-resource-example
+build:
+  artifacts:
+  - image: schema-migrations
+    context: example/spanner
+    docker:
+      dockerfile: Dockerfile
+  - image: takelock-app
+    context: example/app
+    docker:
+      dockerfile: Dockerfile
+deploy:
+  kubectl:
+    manifests:
+    - example/app/kubernetes/deployment.yaml
+    - example/spanner/kubernetes/deployment.yaml
