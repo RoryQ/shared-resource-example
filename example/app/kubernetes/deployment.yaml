@@ -27,6 +27,15 @@ spec:
       labels:
         app: takelock-app
     spec:
+      initContainers:
+        - name: wait-for-deps
+          image: gcr.io/distroless/base-debian11:debug
+          command: [ "/busybox/sh" ]
+          args:
+            - "-c"
+            - >-
+              while ! wget http://protected:50001/count -qO -; do
+              sleep 1; done
       containers:
         - name: takelock-app
           image: takelock-app

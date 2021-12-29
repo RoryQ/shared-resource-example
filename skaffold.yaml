@@ -12,8 +12,13 @@ build:
     context: example/app
     docker:
       dockerfile: Dockerfile
+  - image: protected-app
+    context: example/protected
+    docker:
+      dockerfile: Dockerfile
 deploy:
   kubectl:
     manifests:
     - example/app/kubernetes/deployment.yaml
+    - example/protected/kubernetes/deployment.yaml
     - example/spanner/kubernetes/deployment.yaml
