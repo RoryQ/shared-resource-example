@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"google.golang.org/api/iterator"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,12 +23,61 @@ func main() {
 	name = os.Getenv("POD_NAME")
 	log.Println("takelock app", name, "server ready")
 
-	useProtectedResource(context.Background())
+	go waitForLabel(context.Background(), KVPair{Key: "staging-cluster", Value: "false"})
 
-	//serveHTTP()
+	serveHTTP()
 }
 
-func useProtectedResource(ctx context.Context) {
+type KVPair struct {
+	Key, Value string
+}
+
+func waitForLabel(ctx context.Context, label KVPair) error {
+	ticker := time.NewTicker(5 * time.Second)
+
+	for {
+		select {
+		case <-ticker.C:
+			b, err := os.ReadFile("/etc/podinfo/labels")
+			if err != nil {
+				log.Println(err.Error())
+				continue
+			}
+
+			if !contains(parseLabels(b), label) {
+				continue
+			}
+
+			return useProtectedResource(context.Background())
+		}
+	}
+}
+
+func parseLabels(b []byte) []KVPair {
+	pairs := []KVPair{}
+	r := bufio.NewScanner(bytes.NewReader(b))
+	for r.Scan() {
+		pair := strings.Split(r.Text(), "=")
+		if len(pair) != 2 {
+			log.Println("cannot parse label line:", r.Text())
+			continue
+		}
+
+		pairs = append(pairs, KVPair{pair[0], strings.Trim(pair[1], `"`)})
+	}
+	return pairs
+}
+
+func contains(labels []KVPair, kv KVPair) bool {
+	for _, label := range labels {
+		if label.Key == kv.Key && label.Value == kv.Value {
+			return true
+		}
+	}
+	return false
+}
+
+func useProtectedResource(ctx context.Context) error {
 	db, _ := spanner.NewClient(ctx, "projects/proj/instances/inst/databases/db")
 	defer db.Close()
 
@@ -43,10 +95,10 @@ func useProtectedResource(ctx context.Context) {
 			gotLock, token := lock.HasLock()
 			if gotLock {
 				log.Println("HasLock:", name, token)
-				useSharedResource(ctx)
+				err := useSharedResource(ctx)
 
 				// if lost shared resource lock then shutdown app
-				return
+				return err
 			}
 		}
 	}
@@ -54,7 +106,7 @@ func useProtectedResource(ctx context.Context) {
 
 // this simulates using a protected resource i.e. only one process should access this resource at a time so a
 // distributed lock is required to coordinate sharing access.
-func useSharedResource(ctx context.Context) {
+func useSharedResource(ctx context.Context) error {
 	c := http.Client{Timeout: 30 * time.Second}
 	if _, err := c.Get("http://protected:50001/connect"); err != nil {
 		panic(err)
@@ -68,8 +120,10 @@ func useSharedResource(ctx context.Context) {
 		c := http.Client{Timeout: 30 * time.Second}
 		if _, err := c.Get("http://protected:50001/disconnect"); err != nil {
 			log.Println(err)
+			return err
 		}
 	}
+	return nil
 }
 
 func serveHTTP() {
