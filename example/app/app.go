@@ -48,7 +48,7 @@ func waitForLabel(ctx context.Context, label KVPair) error {
 				continue
 			}
 
-			return useProtectedResource(context.Background())
+			return useProtectedResource(ctx)
 		}
 	}
 }
